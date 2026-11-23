@@ -99,3 +99,12 @@ test('admin opera o painel de uma empresa: escolhe qual, e a auditoria registra 
   const menu = ler('../../operador/src/components/layout/Sidebar.jsx')
   assert.match(menu, /\['tours', 'Passeios'\], \['parking', 'Estacionamento'\], \['company', 'Empresa'\]/)
 })
+
+test('formularios de criar e trocar senha ocultam o valor por padrao', () => {
+  const tela = ler('../../operador/src/pages/empresa/Equipe.jsx')
+  assert.match(tela, /<Input label="Senha de acesso" type="password" required/)
+  assert.match(tela, /<Input label="Nova senha" type="password" required/)
+  assert.equal((tela.match(/autoComplete="new-password"/g) || []).length, 2,
+    'senhas temporarias devem ser identificadas como novas, nao login salvo')
+  assert.doesNotMatch(tela, /<Input label="(?:Senha de acesso|Nova senha)" type="text"/)
+})
