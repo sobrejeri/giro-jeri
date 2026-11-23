@@ -1,26 +1,45 @@
-// Antecipação automática: delay baixo = operador recebe no próximo dia útil.
+// Testes da estrutura ENVIADA ao gateway para antecipacao automatica.
+// Nenhuma chamada real a Pagar.me: fetch e sempre simulado.
 //
-// O payload de antecipação automática mandava `delay: null`. A Pagar.me, sem o
-// campo, assume o padrão dela (365 dias) — aí quase nada é antecipado e o
-// dinheiro do cartão só cai na liquidação natural (D+30). `delay` é a quantidade
-// de dias que NÃO entram no valor antecipável (contados para trás): quanto
-// MENOR, mais cedo o operador recebe. Com delay = 1, antecipa ~tudo → próximo
-// dia útil. Este teste trava o default em 1 (e != null). Asserção de fonte.
+// No modo D+X (type 1025), delay define dias uteis. O volume_percentage
+// so pertence ao modo 'full' e nao deve ser enviado em D+X.
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
+import { setAutomaticAnticipation } from '../src/payments/pagarme.js'
 
-const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8')
-const pagarme = read('../src/payments/pagarme.js')
+async function capturarPayload(opcoes) {
+  const originalFetch = globalThis.fetch
+  let requisicao = null
+  globalThis.fetch = async (url, options) => {
+    requisicao = { url: String(url), ...options }
+    return { ok: true, status: 200, json: async () => ({ id: 'fake' }) }
+  }
+  try {
+    await setAutomaticAnticipation('CHAVE_FICTICIA_SEM_VALIDADE', 're_ficticio', opcoes)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+  assert.ok(requisicao, 'o gateway deve receber o pedido de configuracao')
+  assert.match(requisicao.url, /\/recipients\/re_ficticio\/automatic-anticipation-settings$/)
+  assert.equal(requisicao.method, 'PATCH')
+  return JSON.parse(requisicao.body)
+}
 
-test('o delay padrão da antecipação é 1 dia (não null)', () => {
-  assert.match(pagarme, /const ANTICIPATION_DELAY_DAYS = 1\b/, 'o delay padrão é 1 dia')
-  assert.match(pagarme, /delay = ANTICIPATION_DELAY_DAYS/, 'anticipationSettings usa o default de 1 dia')
-  assert.doesNotMatch(pagarme, /delay = null/, 'não volta a mandar delay null (que vira 365 na Pagar.me)')
+test('antecipacao D+1 envia delay 1 sem volume_percentage', async () => {
+  assert.deepEqual(await capturarPayload(), {
+    enabled: true, type: '1025', delay: 1,
+  })
 })
 
-test('o payload de antecipação ainda manda o campo delay', () => {
-  assert.match(pagarme, /return \{ enabled, type, volume_percentage: String\(volumePercentage\), delay \}/,
-    'o corpo enviado à Pagar.me inclui o delay')
+test('antecipacao D+X aceita delay configurado sem perder o campo', async () => {
+  assert.deepEqual(await capturarPayload({ delay: 2 }), {
+    enabled: true, type: '1025', delay: 2,
+  })
+})
+
+test('modo full preserva volume_percentage e o campo delay', async () => {
+  assert.deepEqual(await capturarPayload({ type: 'full', volumePercentage: '75' }), {
+    enabled: true, type: 'full', delay: 1, volume_percentage: '75',
+  })
 })
