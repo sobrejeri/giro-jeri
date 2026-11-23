@@ -6,8 +6,8 @@ import fs from 'node:fs'
 
 const sql = fs.readFileSync(
   new URL('../../../supabase/migrations/137_integridade_comissao_vendedor_empresa.sql', import.meta.url), 'utf8')
-const rota = fs.readFileSync(
-  new URL('../src/routes/companySellerPayouts.js', import.meta.url), 'utf8')
+const servico = fs.readFileSync(
+  new URL('../src/services/comissaoVendedor.js', import.meta.url), 'utf8')
 
 test('trigger valida empresa, vendedor e reserva na criacao da comissao', () => {
   assert.match(sql, /NEW\.operator_id/)
@@ -28,7 +28,7 @@ test('trigger nao altera valores, status nem pagamentos existentes', () => {
   assert.doesNotMatch(sql, /UPDATE\s+public\.company_seller_payouts\s+SET/i)
   assert.doesNotMatch(sql, /DELETE\s+FROM\s+public\.company_seller_payouts/i)
   assert.doesNotMatch(sql, /SECURITY\s+DEFINER/i)
-  assert.match(rota, /company_id: companyId, operator_id: b\.operator_id/)
+  assert.match(servico, /company_id: companyId, operator_id: b\.operator_id/)
 })
 
 test('funcao interna de seguranca nao vira RPC publica', () => {
