@@ -199,7 +199,7 @@ function FilaLiberacao() {
     })
   }
   function liberarUm(r) {
-    const msg = `Liberar o repasse de ${fmtR$(r.operador_valor)} para ${r.operador?.nome || 'operador'}?\n\n`
+    const msg = `Registrar o repasse de ${fmtR$(r.operador_valor)} para ${r.beneficiario?.nome || 'beneficiário'}?\n\n`
       + 'Isto REGISTRA um pagamento MANUAL feito por fora (PIX/banco) — a plataforma '
       + 'NÃO transfere pelo gateway. A ação é revalidada e auditada no servidor.'
     if (confirm(msg)) liberarMut.mutate([r.booking_id])
@@ -317,7 +317,7 @@ function FilaLiberacao() {
                   {r.service_type === 'transfer' ? 'Transfer' : 'Passeio'} · {gwLabel(r.gateway)} · {fmtDataHora(r.completed_at)}
                 </p>
                 <div className="mt-1"><UserIdentity name={r.operador?.nome} userType={r.operador?.user_type} photo={r.operador?.photo} size={24} nameClass="text-gray-300" /></div>
-                {r.elegivel_liberar && <div className="mt-0.5"><ChavePix chave={r.operador?.pix_key} tipo={r.operador?.pix_key_type} /></div>}
+                {r.elegivel_liberar && <div className="mt-1 text-[11px] text-gray-400">Recebe: <strong className="text-gray-200">{r.beneficiario?.nome}</strong>{r.beneficiario?.user_type === 'company' ? ' (empresa)' : ''}<ChavePix chave={r.beneficiario?.pix_key} tipo={r.beneficiario?.pix_key_type} /></div>}
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs">
                   <span className="text-gray-500">Pago <span className="text-gray-300">{fmtR$(r.valor_pago)}</span></span>
                   <span className="text-gray-500">Plataforma <span className="text-gray-400">{fmtR$(r.plataforma_valor)}</span></span>
@@ -347,12 +347,12 @@ function FilaLiberacao() {
                     onChange={toggleTodos} title="Marcar todos os prontos desta página" />
                 </th>
                 <th className="px-3 py-2">Reserva</th>
-                <th className="px-3 py-2">Operador</th>
+                <th className="px-3 py-2">Operador / beneficiário</th>
                 <th className="px-3 py-2">Conclusão</th>
                 <th className="px-3 py-2">Gateway</th>
                 <th className="px-3 py-2 text-right">Pago</th>
                 <th className="px-3 py-2 text-right">Plataforma</th>
-                <th className="px-3 py-2 text-right">Operador</th>
+                <th className="px-3 py-2 text-right">Repasse</th>
                 <th className="px-3 py-2">Situação</th>
                 <th className="px-3 py-2"></th>
               </tr>
@@ -377,7 +377,7 @@ function FilaLiberacao() {
                     <UserIdentity name={r.operador?.nome} userType={r.operador?.user_type} photo={r.operador?.photo} size={24} nameClass="text-gray-300" />
                     {/* Para onde mandar o PIX manual — só aparece nos prontos. */}
                     {r.elegivel_liberar && (
-                      <span className="block mt-0.5"><ChavePix chave={r.operador?.pix_key} tipo={r.operador?.pix_key_type} /></span>
+                      <span className="block mt-0.5 text-[11px] text-gray-400">Recebe: <strong className="text-gray-200">{r.beneficiario?.nome}</strong>{r.beneficiario?.user_type === 'company' ? ' (empresa)' : ''}<ChavePix chave={r.beneficiario?.pix_key} tipo={r.beneficiario?.pix_key_type} /></span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{fmtDataHora(r.completed_at)}</td>
