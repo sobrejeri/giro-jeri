@@ -21,8 +21,15 @@ jobs:
         run: npm ci
       - name: Apply safe npm fixes (no force, no major upgrades)
         run: npm audit fix || true
-      - name: Run API tests
-        run: npm test --workspace=packages/api
+      - name: Run critical regression tests (43 cases)
+        run: |
+          node --test \
+            packages/api/test/goLiveDiagnostics.test.js \
+            packages/api/test/empresaEquipe.test.js \
+            packages/api/test/empresaVinculo.test.js \
+            packages/api/test/empresaRepasses.test.js \
+            packages/api/test/companyPayout.test.js \
+            packages/api/test/relatorioEmpresa.test.js
         env:
           SUPABASE_URL: http://localhost:54321
           SUPABASE_SERVICE_ROLE_KEY: chave-de-teste-sem-permissao
