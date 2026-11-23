@@ -42,3 +42,11 @@ test('POST login verifica o perfil ANTES de expor token ou iniciar verificacao',
   assert.match(bloco.slice(i, verifica), /status\(403\)\.json\(\{ error: 'Conta suspensa ou inativa' \}\)/)
   assert.match(middleware, /if \(!profile\.is_active\)/, 'middleware de outras rotas continua bloqueando a conta')
 })
+
+test('perfil inexistente nao expõe email, documento ou auth_id na resposta', () => {
+  const inicio = auth.indexOf("if (!profile) {", auth.indexOf("router.post('/login'"))
+  const bloco = auth.slice(inicio, auth.indexOf('// Supabase Auth valida', inicio))
+  assert.match(bloco, /res\.status\(401\)\.json\(\{ error: 'Perfil não encontrado\. Entre em contato com a Turiva\.' \}\)/)
+  assert.doesNotMatch(bloco, /auth_email:|used_email:|used_cnpj:|data\.user\.email/)
+  assert.doesNotMatch(bloco, /\`Perfil não encontrado \(/)
+})
