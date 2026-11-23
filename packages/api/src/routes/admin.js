@@ -2553,9 +2553,9 @@ router.get('/payouts/fila', requireAdmin, async (req, res, next) => {
     const SELECT = `
       id, booking_code, service_type, service_date,
       total_amount, status_commercial, status_operational, completed_at,
-      operator:operator_id ( id, full_name, phone, pix_key, pix_key_type, user_type, profile_photo_url ),
+      operator:operator_id ( id, full_name, phone, pix_key, pix_key_type, user_type, is_active, profile_photo_url ),
       booking_payouts ( id, kind, amount, status, payee_user_id, paid_at,
-        payee:payee_user_id ( id, full_name, user_type, pix_key, pix_key_type ) ),
+        payee:payee_user_id ( id, full_name, user_type, is_active, pix_key, pix_key_type ) ),
       payments ( id, gateway_name, amount_gross, status, paid_at, split_operator_id )
     `;
     let consulta = recorte(supabase.from('bookings').select(SELECT));
@@ -2597,9 +2597,9 @@ router.get('/payouts/indicadores', requireAdmin, async (req, res, next) => {
     const SELECT = `
       id, booking_code, service_type, service_date, total_amount,
       status_commercial, status_operational, completed_at,
-      operator:operator_id ( id, full_name ),
+      operator:operator_id ( id, full_name, is_active ),
       booking_payouts ( id, kind, amount, status, payee_user_id,
-        payee:payee_user_id ( id, full_name, user_type, pix_key, pix_key_type ) ),
+        payee:payee_user_id ( id, full_name, user_type, is_active, pix_key, pix_key_type ) ),
       payments ( id, gateway_name, amount_gross, status, split_operator_id )
     `;
     const { data: concluidas, error } = await supabase
@@ -2672,9 +2672,9 @@ router.post('/payouts/liberar', requireAdmin, async (req, res, next) => {
     const SELECT = `
       id, booking_code, service_type, service_date,
       total_amount, status_commercial, status_operational, completed_at,
-      operator:operator_id ( id, full_name, phone, pix_key, pix_key_type, user_type, profile_photo_url ),
+      operator:operator_id ( id, full_name, phone, pix_key, pix_key_type, user_type, is_active, profile_photo_url ),
       booking_payouts ( id, kind, amount, status, payee_user_id, paid_at,
-        payee:payee_user_id ( id, full_name, user_type, pix_key, pix_key_type ) ),
+        payee:payee_user_id ( id, full_name, user_type, is_active, pix_key, pix_key_type ) ),
       payments ( id, gateway_name, amount_gross, status, paid_at, split_operator_id )
     `;
     const { data: rows, error } = await supabase
