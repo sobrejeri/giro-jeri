@@ -16,7 +16,7 @@ const reservaBase = (over = {}) => ({
   id: 'b1', booking_code: 'GJ1', service_type: 'tour', service_date: '2026-09-20',
   total_amount: 100, status_commercial: 'paid', status_operational: 'completed',
   completed_at: '2026-09-20T18:00:00Z',
-  operator: { id: 'op1', full_name: 'Coop' },
+  operator: { id: 'op1', full_name: 'Coop', is_active: true },
   payments: [{ status: 'approved', amount_gross: 100, gateway_name: 'mercadopago' }],
   booking_payouts: [{ id: 'p1', kind: 'commission', amount: 30, status: 'pending', payee_user_id: 'op1' }],
   ...over,
