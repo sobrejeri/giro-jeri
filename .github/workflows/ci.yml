@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'fix/go-live-*' ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, 'claude/giro-jeri-platform-GFBFR' ]
 
 jobs:
   lint:
@@ -23,4 +23,10 @@ jobs:
         run: npm install
 
       - name: Check for syntax errors
-        run: node --check packages/api/src/index.js
+        run: |
+          node --check packages/api/src/index.js
+          node --check packages/api/src/routes/admin.js
+          node --check packages/api/src/lib/goLiveDiagnostics.js
+
+      - name: Test go-live diagnostics (no credentials required)
+        run: node --test packages/api/test/goLiveDiagnostics.test.js
