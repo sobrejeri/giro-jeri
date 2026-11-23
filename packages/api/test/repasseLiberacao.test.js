@@ -279,7 +279,7 @@ test('a falha de auditoria é conferida, não engolida', () => {
 })
 
 test('fila e liberação consultam o beneficiário real nos três SELECTs', () => {
-  const joins = adminSrc.match(/payee:payee_user_id \( id, full_name, user_type, pix_key, pix_key_type \)/g) || []
+  const joins = adminSrc.match(/payee:payee_user_id \( id, full_name, user_type, is_active, pix_key, pix_key_type \)/g) || []
   assert.ok(joins.length >= 3, 'fila, indicadores e baixa devem usar join de beneficiário')
   const inicio = adminSrc.indexOf("router.post('/payouts/liberar'")
   const bloco = adminSrc.slice(inicio, adminSrc.indexOf("router.get('/payouts/conciliacao'", inicio))
