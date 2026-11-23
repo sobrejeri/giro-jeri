@@ -455,15 +455,11 @@ router.post('/login', async (req, res, next) => {
     }
 
     if (!profile) {
-      console.error('[login] profile lookup failed', {
-        auth_id:    data.user.id,
-        auth_email: data.user.email,
-        used_email: authEmail,
-        used_cnpj:  body.cnpj,
-      });
-      return res.status(500).json({
-        error: `Perfil não encontrado (auth_id=${data.user.id?.slice(0,8)}, email=${data.user.email})`,
-      });
+      // Auth válido, perfil ausente: não devolver e-mail, documento ou auth_id
+      // ao navegador nem registrar PII nos logs de autenticação.
+      console.error('[login] token válido sem perfil correspondente (tipo=%s)',
+        body.cnpj ? 'documento' : body.email ? 'email' : body.username ? 'usuario' : 'outro');
+      return res.status(401).json({ error: 'Perfil não encontrado. Entre em contato com a Turiva.' });
     }
 
     // Supabase Auth valida as credenciais, mas a suspensão existe em
