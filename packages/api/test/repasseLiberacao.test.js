@@ -44,6 +44,45 @@ test('reserva concluída, paga e com comissão pendente é elegível', () => {
   assert.equal(l.operador.pix_key, 'sol@x.com')
 })
 
+test('operador vinculado: repasse vai para PIX da EMPRESA, não do operador', () => {
+  const empresa = { id: 'empresa-qa', full_name: 'Empresa TURIVA QA', user_type: 'company', pix_key: 'empresa@exemplo.com', pix_key_type: 'email' }
+  const l = montarLinhaFila(reserva({
+    booking_payouts: [{
+      id: 'po-empresa', kind: 'commission', amount: 800, status: 'pending',
+      payee_user_id: empresa.id, payee: empresa,
+    }],
+  }))
+  assert.equal(l.elegivel_liberar, true)
+  assert.equal(l.beneficiario.id, 'empresa-qa')
+  assert.equal(l.beneficiario.user_type, 'company')
+  assert.equal(l.beneficiario.nome, 'Empresa TURIVA QA')
+  assert.equal(l.beneficiario.pix_key, 'empresa@exemplo.com')
+  assert.notEqual(l.beneficiario.pix_key, l.operador.pix_key)
+})
+
+test('beneficiário externo sem perfil resolvido bloqueia baixa por conciliação', () => {
+  const l = montarLinhaFila(reserva({
+    booking_payouts: [{ id: 'po-empresa', kind: 'commission', amount: 800, status: 'pending', payee_user_id: 'empresa-desconhecida' }],
+  }))
+  assert.equal(l.elegivel_liberar, false)
+  assert.equal(l.situacao, 'conciliacao')
+  assert.equal(l.beneficiario, null)
+  assert.match(l.motivo_bloqueio, /beneficiário do repasse não identificado/)
+})
+
+test('empresa identificada sem PIX continua visível para acerto bancário manual', () => {
+  const l = montarLinhaFila(reserva({
+    booking_payouts: [{
+      id: 'po-empresa', kind: 'commission', amount: 800, status: 'pending',
+      payee_user_id: 'empresa-qa',
+      payee: { id: 'empresa-qa', full_name: 'TURIVA QA', user_type: 'company' },
+    }],
+  }))
+  assert.equal(l.elegivel_liberar, true)
+  assert.equal(l.beneficiario.nome, 'TURIVA QA')
+  assert.equal(l.beneficiario.pix_key, null)
+})
+
 test('reserva cancelada/estornada/contestada NUNCA é elegível', () => {
   for (const s of ['cancelled', 'refunded', 'disputed']) {
     const l = montarLinhaFila(reserva({ status_commercial: s }))
@@ -191,4 +230,21 @@ test('a auditoria usa um valor VÁLIDO do enum e um discriminador', () => {
 test('a falha de auditoria é conferida, não engolida', () => {
   assert.ok(liberar.includes('auditoria_ok'),
     'o erro do insert de auditoria precisa ser conferido e reportado')
+})
+
+test('fila e liberação consultam o beneficiário real nos três SELECTs', () => {
+  const joins = adminSrc.match(/payee:payee_user_id \( id, full_name, user_type, pix_key, pix_key_type \)/g) || []
+  assert.ok(joins.length >= 3, 'fila, indicadores e baixa devem usar join de beneficiário')
+  const inicio = adminSrc.indexOf("router.post('/payouts/liberar'")
+  const bloco = adminSrc.slice(inicio, adminSrc.indexOf("router.get('/payouts/conciliacao'", inicio))
+  assert.match(bloco, /beneficiario: linha\.beneficiario\?\.nome/)
+  assert.match(bloco, /payee_user_id: p\.payee_user_id/, 'auditoria preserva o ID do beneficiário persistido')
+})
+
+test('painel admin usa PIX e nome do beneficiário, nunca PIX pessoal do operador', () => {
+  const tela = fs.readFileSync(new URL('../../admin/src/pages/Repasses.jsx', import.meta.url), 'utf8')
+  assert.match(tela, /Recebe:/)
+  assert.match(tela, /r\.beneficiario\?\.nome/)
+  assert.match(tela, /r\.beneficiario\?\.pix_key/)
+  assert.doesNotMatch(tela, /ChavePix chave=\{r\.operador\?\.pix_key\}/)
 })

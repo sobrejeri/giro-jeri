@@ -33,6 +33,23 @@ export function montarLinhaFila(b) {
     || (b.operator ? payouts.find((p) => p.payee_user_id === b.operator.id) : null)
     || null;
   const execucao = payouts.find((p) => p.kind === 'execution') || null;
+
+  // O operador que ACEITOU não é necessariamente quem RECEBE o repasse.
+  // Ao vincular-se a uma empresa, o trigger 129 registra o beneficiário da
+  // comissão em payee_user_id (snapshot). Nunca sugerir o PIX pessoal do
+  // operador quando a comissão está endereçada à empresa.
+  const payeeId = doOperador?.payee_user_id || null;
+  const payee = doOperador?.payee?.id === payeeId
+    ? doOperador.payee
+    : b.operator?.id === payeeId ? b.operator : null;
+  const beneficiario = payee ? {
+    id: payee.id,
+    nome: payee.full_name || null,
+    user_type: payee.user_type || null,
+    pix_key: payee.pix_key || null,
+    pix_key_type: payee.pix_key_type || null,
+  } : null;
+
   // Split antigo pagou o operador direto na conta dele (histórico) — não pode
   // ser liberado de novo.
   const pagoPeloGateway = !!(b.operator &&
@@ -61,6 +78,10 @@ export function montarLinhaFila(b) {
     situacao = 'cancelado';
   } else if (doOperador.status === 'paid') {
     situacao = 'pago';
+  } else if (!beneficiario) {
+    // Sem conseguir conferir o verdadeiro credor, bloquear baixa manual.
+    situacao = 'conciliacao';
+    motivoBloqueio = 'beneficiário do repasse não identificado — conferir antes de baixar';
   } else {
     situacao = 'pronto_para_liberar'; elegivel = true;   // concluído + pago + pendente
   }
@@ -71,6 +92,7 @@ export function montarLinhaFila(b) {
     service_type:    b.service_type,          // 'tour' | 'transfer'
     service_date:    b.service_date,
     completed_at:    b.completed_at,          // UTC — a UI exibe em America/Fortaleza
+    beneficiario,
     operador:        b.operator ? {
       id: b.operator.id, nome: b.operator.full_name,
       user_type: b.operator.user_type || null,
