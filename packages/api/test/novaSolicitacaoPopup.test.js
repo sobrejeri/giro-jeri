@@ -48,18 +48,25 @@ test('o pop-up é montado no Layout — aparece em qualquer tela', () => {
   assert.match(layout, /<NovaSolicitacaoPopup \/>/)
 })
 
-test('aceitar leva às Solicitações na aba Minhas corridas', () => {
-  assert.match(fonte, /navigate\('\/reservas\?tab=mine'\)/,
-    'depois de aceitar, o operador deve cair direto em Minhas corridas')
+test('aceitar leva às Operações para visualizar a corrida ativa', () => {
+  // A tela antiga /reservas foi incorporada ao cockpit (/dashboard).
+  const from = fonte.indexOf('  async function aceitar(u)')
+  const corpo = fonte.slice(from, fonte.indexOf('  if (!atual &&', from))
+  assert.match(corpo, /navigate\('\/dashboard'\)/,
+    'depois de aceitar, o operador deve cair na aba Ativas do cockpit')
 })
 
-test('a tela de Reservas honra ?tab=mine e limpa da URL depois', () => {
-  const reservas = fs.readFileSync(
-    new URL('../../operador/src/pages/Reservas.jsx', import.meta.url), 'utf8')
-  assert.match(reservas, /useSearchParams/, 'a aba inicial vem da navegação')
-  assert.match(reservas, /searchParams\.get\('tab'\)/)
-  assert.match(reservas, /abaValida\.includes\(t\)/, 'só aceita aba conhecida — nada de tab inválida')
-  assert.match(reservas, /p\.delete\('tab'\)/, 'não pode "grudar" a aba num reload')
+test('Dashboard abre em Ativas e mantém Novas para itens ainda pendentes', () => {
+  const dashboard = fs.readFileSync(
+    new URL('../../operador/src/pages/Dashboard.jsx', import.meta.url), 'utf8')
+  const app = fs.readFileSync(
+    new URL('../../operador/src/App.jsx', import.meta.url), 'utf8')
+  assert.match(dashboard, /searchParams\.get\('tab'\) === 'novas' \? 'novas' : 'active'/,
+    'Dashboard abre em Ativas quando não vem com aba explícita')
+  assert.match(dashboard, /const activeBooks = allBooks\.filter/,
+    'Ativas lista o pipeline das reservas, inclusive aceitas que aguardam pagamento')
+  assert.match(app, /path="reservas"\s+element=\{<Navigate to="\/dashboard\?tab=novas" replace \/>\}/,
+    'links antigos de Solicitações continuam redirecionados ao cockpit')
 })
 
 test('Minhas corridas é ordenada por data de solicitação (mais recente primeiro)', () => {
