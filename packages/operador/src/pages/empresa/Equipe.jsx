@@ -197,7 +197,7 @@ export default function Equipe() {
             : <Input label="CPF ou CNPJ (login)" disabled value={formatarDocumento(modal?.op?.document_number)} readOnly />}
           <Input label="E-mail" type="email" required {...campo('email')} />
           <Input label="Telefone / WhatsApp" inputMode="tel" placeholder="(88) 90000-0000" {...campo('phone')} />
-          {modal?.modo === 'novo' && <Input label="Senha de acesso" type="text" required minLength={6} placeholder="Mínimo 6 caracteres" autoComplete="off" {...campo('password')} />}
+          {modal?.modo === 'novo' && <Input label="Senha de acesso" type="password" required minLength={6} placeholder="Mínimo 6 caracteres" autoComplete="new-password" {...campo('password')} />}
           <div>
             <Input label="Comissão do operador sobre as vendas (%)" inputMode="decimal" placeholder="Ex.: 10" {...campo('commission_pct')} />
             <p className="text-xs text-gray-500 mt-1">
@@ -218,7 +218,7 @@ export default function Equipe() {
       <Modal open={modal?.modo === 'senha'} onClose={fechar} title="Nova senha" size="sm">
         <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); executar(() => api.setCompanyOperatorPassword(modal.op.id, senha), `Senha de ${modal.op.full_name} alterada.`) }}>
           <p className="text-sm text-gray-600">Defina uma nova senha para <strong>{modal?.op?.full_name}</strong> e informe a ele.</p>
-          <Input label="Nova senha" type="text" required minLength={6} autoComplete="off" value={senha} onChange={(e) => setSenha(e.target.value)} />
+          <Input label="Nova senha" type="password" required minLength={6} autoComplete="new-password" value={senha} onChange={(e) => setSenha(e.target.value)} />
           {erro && <p role="alert" className="text-sm text-red-700">{erro}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={fechar}>Cancelar</Button>
