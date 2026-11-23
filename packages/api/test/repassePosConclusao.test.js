@@ -49,7 +49,8 @@ test('PUT /payouts/:id só baixa (paid) se a reserva estiver concluída', () => 
 
 test('/payouts/pay-all só paga repasses de reservas concluídas', () => {
   const i = admin.indexOf("router.post('/payouts/pay-all'")
-  const r = admin.slice(i, i + 1400).replace(/\s+/g, ' ')
+  const fim = admin.indexOf("router.get('/operators/:operatorId/modals'", i)
+  const r = admin.slice(i, fim).replace(/\s+/g, ' ')
   assert.ok(/bookings \( status_operational \)/.test(r) || /status_operational/.test(r),
     'pay-all precisa olhar o status da reserva')
   assert.ok(/status_operational === 'completed'/.test(r),
