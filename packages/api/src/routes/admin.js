@@ -796,6 +796,13 @@ router.patch('/users/:id', requireAdmin, async (req, res, next) => {
     if (error?.code === '23503' && /company/.test(error.message || '')) {
       return res.status(409).json({ error: 'Esta empresa tem operadores vinculados. Desvincule os operadores antes de mudar o tipo dela.' });
     }
+    // Guard de histórico (135): não atribuir reservas antigas à empresa nova
+    // e não fazê-las desaparecer da empresa anterior após re-vínculo.
+    if (error?.code === '23514' && /reservas anteriores|users_company_booking_history_guard/.test(error.message || '')) {
+      return res.status(409).json({
+        error: 'Este operador possui reservas anteriores. Para mudar a empresa, é necessário preservar o histórico das reservas. O vínculo não foi alterado.',
+      });
+    }
     if (error?.code === '23514' && /company/.test(error.message || '')) {
       return res.status(400).json({ error: 'Somente operadores podem ser vinculados a uma empresa.' });
     }
