@@ -800,7 +800,7 @@ router.patch('/users/:id', requireAdmin, async (req, res, next) => {
     // e não fazê-las desaparecer da empresa anterior após re-vínculo.
     if (error?.code === '23514' && /reservas anteriores|users_company_booking_history_guard/.test(error.message || '')) {
       return res.status(409).json({
-        error: 'Este operador possui reservas anteriores. Para mudar a empresa, é necessário preservar o histórico das reservas. O vínculo não foi alterado.',
+        error: 'Este operador possui reservas ou vendas externas anteriores. Para mudar a empresa, é necessário preservar o histórico de ambas. O vínculo não foi alterado.',
       });
     }
     if (error?.code === '23514' && /company/.test(error.message || '')) {
