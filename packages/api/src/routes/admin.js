@@ -15,6 +15,7 @@ import { notifyDispatchOS } from '../services/whatsapp.js';
 import dayjs from 'dayjs';
 import crypto from 'node:crypto';
 import { empresaDoOperador, semVinculoNoBanco, MSG_MIGRACAO_EMPRESA } from '../lib/vinculoEmpresa.js';
+import { verificarSegredosDeCadastro, verificarColunas, verificarTabela } from '../lib/goLiveDiagnostics.js';
 import { papelValido } from '../lib/papelExecutor.js';
 import { colunaFaltante } from '../lib/colunaFaltante.js';
 import { montarLinhaFila, conciliarReserva, ORDEM_CONCILIACAO } from '../services/payoutQueue.js';
@@ -1057,12 +1058,8 @@ router.get('/diagnostico/go-live', requireAdmin, async (_req, res, next) => {
       has('MERCADO_PAGO_WEBHOOK_SECRET') ? 'assinatura configurada' : 'sem assinatura do webhook')
     // O OTP e os tokens aceitam chaves próprias OU derivação segura da service role.
     // Exigir os dois segredos dedicados aqui gerava falso crítico em instalações válidas.
-    const otpSeguro = has('OTP_PEPPER') || has('SUPABASE_SERVICE_ROLE_KEY')
-    const cadastroSeguro = has('SIGNUP_TOKEN_SECRET') || has('SUPABASE_SERVICE_ROLE_KEY')
-    const segredosDedicados = has('OTP_PEPPER', 'SIGNUP_TOKEN_SECRET')
-    add('credencial', 'Segredos de segurança (OTP/cadastro)', otpSeguro && cadastroSeguro, 'critico',
-      segredosDedicados ? 'segredos dedicados definidos'
-        : (otpSeguro && cadastroSeguro ? 'chaves ausentes derivadas da service role' : 'sem segredos seguros disponíveis'))
+    const segredos = verificarSegredosDeCadastro(env)
+    add('credencial', 'Segredos de segurança (OTP/cadastro)', segredos.ok, 'critico', segredos.detalhe)
     add('credencial', 'Banco de dados (Supabase)', has('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'), 'critico',
       has('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY') ? 'conectado' : 'não configurado')
     add('credencial', 'E-mail (Brevo ou Resend)', !!(env.BREVO_API_KEY || env.RESEND_API_KEY) && has('EMAIL_FROM'), 'importante',
@@ -1079,19 +1076,9 @@ router.get('/diagnostico/go-live', requireAdmin, async (_req, res, next) => {
     // ── Migrações críticas (prova o schema real) ──
     // Nunca considere OK uma consulta que falhou por permissão, conexão ou
     // schema desatualizado. A verificação é somente leitura (HEAD).
-    const colsExist = async (table, cols) => {
-      try {
-        const { error } = await supabase.from(table).select(cols.join(', '), { head: true }).limit(1)
-        return !error
-      } catch { return false }
-    }
+    const colsExist = (table, cols) => verificarColunas(supabase, table, cols)
     const colExists = (table, col) => colsExist(table, [col])
-    const tableExists = async (table) => {
-      try {
-        const { error } = await supabase.from(table).select('id', { head: true, count: 'exact' }).limit(1)
-        return !error
-      } catch { return false }
-    }
+    const tableExists = (table) => verificarTabela(supabase, table)
     add('migracao', 'Afiliados (055)',                    await colExists('users', 'affiliate_code'),     'importante', 'tabela/colunas do programa de afiliados')
     add('migracao', 'Chave PIX do afiliado (056)',        await colExists('users', 'affiliate_pix_key'),  'importante', 'cadastro de PIX para o repasse')
     add('migracao', 'Vagas por tipo no estacionamento (120)', await colExists('parking_tariffs', 'capacity'),        'importante', 'capacidade por tipo de veículo')
