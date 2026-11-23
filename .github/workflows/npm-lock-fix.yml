@@ -1,0 +1,55 @@
+name: Nonbreaking npm security fixes (review branch)
+
+on:
+  push:
+    branches:
+      - security/npm-lock-fix-20261123
+
+permissions:
+  contents: write
+
+jobs:
+  fix-test:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Apply safe npm fixes (no force, no major upgrades)
+        run: npm audit fix || true
+      - name: Run API tests
+        run: npm test --workspace=packages/api
+        env:
+          SUPABASE_URL: http://localhost:54321
+          SUPABASE_SERVICE_ROLE_KEY: chave-de-teste-sem-permissao
+      - name: Build web apps
+        run: |
+          npm run build --workspace=packages/admin
+          npm run build --workspace=packages/operador
+          npm run build --workspace=packages/turista
+      - name: Report remaining production vulnerabilities
+        run: |
+          npm audit --omit=dev --json > /tmp/npm-audit-prod.json || true
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+          const x = JSON.parse(fs.readFileSync('/tmp/npm-audit-prod.json', 'utf8'))
+          console.log('REMAINING_PRODUCTION', JSON.stringify(x.metadata?.vulnerabilities))
+          for (const [name, v] of Object.entries(x.vulnerabilities || {}))
+            console.log('REMAINING_PACKAGE', JSON.stringify({name, severity:v.severity, fixAvailable:v.fixAvailable}))
+          NODE
+      - name: Commit reviewed package updates to branch only
+        run: |
+          git add package-lock.json package.json packages/*/package.json
+          if git diff --cached --quiet; then
+            echo "No package changes to commit"
+            exit 0
+          fi
+          git diff --cached --stat
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(deps): aplicar apenas correcoes npm sem --force"
+          git push
