@@ -12,6 +12,7 @@ import { sendPasswordReset }                 from '../services/email.js';
 import { requestOtp, maskDestination }       from '../services/otp.js';
 import { notifyUser, getTemplate, notifyAdmins } from '../services/notify.js';
 import { buildChannels }                     from './otp.js';
+import { perfilAtivoParaLogin } from '../lib/loginAccess.js';
 
 const router = Router();
 
@@ -58,7 +59,7 @@ const loginSchema = z.object({
 });
 
 // Conjunto mínimo de colunas do perfil — usado em login e register
-const PROFILE_COLS = 'id, full_name, email, phone, user_type, profile_photo_url, document_number';
+const PROFILE_COLS = 'id, full_name, email, phone, user_type, profile_photo_url, document_number, is_active';
 
 // Verificação de contato (OTP) no cadastro de turista.
 // LIGADA por padrão (decisão do usuário, 23/07): o OTP valida a CRIAÇÃO da
@@ -454,15 +455,18 @@ router.post('/login', async (req, res, next) => {
     }
 
     if (!profile) {
-      console.error('[login] profile lookup failed', {
-        auth_id:    data.user.id,
-        auth_email: data.user.email,
-        used_email: authEmail,
-        used_cnpj:  body.cnpj,
-      });
-      return res.status(500).json({
-        error: `Perfil não encontrado (auth_id=${data.user.id?.slice(0,8)}, email=${data.user.email})`,
-      });
+      // Auth válido, perfil ausente: não devolver e-mail, documento ou auth_id
+      // ao navegador nem registrar PII nos logs de autenticação.
+      console.error('[login] token válido sem perfil correspondente (tipo=%s)',
+        body.cnpj ? 'documento' : body.email ? 'email' : body.username ? 'usuario' : 'outro');
+      return res.status(401).json({ error: 'Perfil não encontrado. Entre em contato com a Turiva.' });
+    }
+
+    // Supabase Auth valida as credenciais, mas a suspensão existe em
+    // public.users. Sem checar aqui, um operador bloqueado recebe token e o
+    // frontend abre uma sessão que a próxima chamada /me imediatamente recusa.
+    if (!perfilAtivoParaLogin(profile)) {
+      return res.status(403).json({ error: 'Conta suspensa ou inativa' });
     }
 
     // ── Gate de verificação (apenas tourists) ──────────────
