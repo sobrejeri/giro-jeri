@@ -44,7 +44,7 @@ test('POST login verifica o perfil ANTES de expor token ou iniciar verificacao',
 })
 
 test('perfil inexistente nao expõe email, documento ou auth_id na resposta', () => {
-  const inicio = auth.indexOf("if (!profile) {", auth.indexOf("router.post('/login'"))
+  const inicio = auth.lastIndexOf("if (!profile) {", auth.indexOf('// Supabase Auth valida'))
   const bloco = auth.slice(inicio, auth.indexOf('// Supabase Auth valida', inicio))
   assert.match(bloco, /res\.status\(401\)\.json\(\{ error: 'Perfil não encontrado\. Entre em contato com a Turiva\.' \}\)/)
   assert.doesNotMatch(bloco, /auth_email:|used_email:|used_cnpj:|data\.user\.email/)
