@@ -242,7 +242,7 @@ test('fila e liberação consultam o beneficiário real nos três SELECTs', () =
 })
 
 test('painel admin usa PIX e nome do beneficiário, nunca PIX pessoal do operador', () => {
-  const tela = fs.readFileSync(new URL('../../../admin/src/pages/Repasses.jsx', import.meta.url), 'utf8')
+  const tela = fs.readFileSync(new URL('../../admin/src/pages/Repasses.jsx', import.meta.url), 'utf8')
   assert.match(tela, /Recebe:/)
   assert.match(tela, /r\.beneficiario\?\.nome/)
   assert.match(tela, /r\.beneficiario\?\.pix_key/)
