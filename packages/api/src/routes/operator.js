@@ -21,6 +21,7 @@ import {
   notifyDriverRideStarted,
 } from '../services/whatsapp.js';
 import { isBookingLegsEngineEnabled } from '../services/featureFlags.js';
+import { operatorMayAcceptBookingsInRegions } from '../services/fleet.js';
 import { isMarketplaceConfigured } from '../services/mercadoPago.js';
 import { validateUsername } from '../lib/username.js'; // eslint-disable-line no-unused-vars
 import { ensurePaymentDeadlineAndNotify } from '../services/legFlow.js';
@@ -1418,11 +1419,20 @@ router.post('/legs/:legId/accept', async (req, res, next) => {
     if (!isAdmin) {
       const { data: legRow, error: legErr } = await supabase
         .from('booking_legs')
-        .select('vehicle_id')
+        .select('vehicle_id, booking_id')
         .eq('id', req.params.legId)
         .maybeSingle();
       if (legErr) throw legErr;
       if (!legRow) return res.status(404).json({ error: 'Perna não encontrada' });
+
+      const { data: bookingRegiao, error: bookingRegiaoErr } = await supabase
+        .from('bookings').select('id, region_id, service_id, service_type')
+        .eq('id', legRow.booking_id).maybeSingle();
+      if (bookingRegiaoErr) throw bookingRegiaoErr;
+      if (!bookingRegiao) return res.status(404).json({ error: 'Reserva da perna não encontrada' });
+      if (!(await operatorMayAcceptBookingsInRegions(supabase, req.user.id, [bookingRegiao]))) {
+        return res.status(403).json({ error: 'Este serviço está fora dos seus municípios de atuação.' });
+      }
 
       const { data: disabled, error: prefErr } = await supabase
         .from('operator_service_preferences')
@@ -1529,7 +1539,7 @@ router.post('/bookings/group/:groupId/accept', async (req, res, next) => {
 
     const { data: groupRows, error: gErr } = await supabase
       .from('bookings')
-      .select('id, booking_code, user_id, service_type, operator_id, status_commercial, status_operational')
+      .select('id, booking_code, user_id, service_type, service_id, region_id, operator_id, status_commercial, status_operational')
       .eq('order_group_id', gid)
     if (gErr) throw gErr
     if (!groupRows || groupRows.length === 0) {
@@ -1540,6 +1550,13 @@ router.post('/bookings/group/:groupId/accept', async (req, res, next) => {
     const alive = groupRows.filter(
       (b) => !['cancelled', 'expired'].includes(b.status_commercial) && b.status_operational !== 'cancelled'
     )
+
+    // Não basta a listagem ter filtrado o pedido. Revalidar TODOS os serviços
+    // diretamente no POST, inclusive quando o id do carrinho veio de fora.
+    if (!isAdmin && alive.length > 0
+        && !(await operatorMayAcceptBookingsInRegions(supabase, req.user.id, alive))) {
+      return res.status(403).json({ error: 'O pedido possui serviço fora dos seus municípios de atuação.' });
+    }
 
     // Tudo-ou-nada: se qualquer parte já está com OUTRO operador, ninguém
     // mais pega — o pedido é uma unidade só.
@@ -1604,10 +1621,18 @@ router.post('/bookings/:id/accept', async (req, res, next) => {
     const isAdmin = req.user?.user_type === 'admin'
     const nowIso  = new Date().toISOString()
 
-    // Conta Mercado Pago obrigatória para aceitar (migration 070). Sem ela o
-    // pagamento cairia inteiro na plataforma e o operador ficaria esperando um
-    // repasse que o split deveria fazer sozinho.
+    // Revalida o município ANTES da atribuição atômica. Um POST direto com
+    // ID de reserva de outra cidade não pode contornar o filtro da fila.
     if (!isAdmin) {
+      const { data: bookingRegiao, error: bookingRegiaoErr } = await supabase
+        .from('bookings').select('id, region_id, service_id, service_type')
+        .eq('id', req.params.id).maybeSingle();
+      if (bookingRegiaoErr) throw bookingRegiaoErr;
+      if (!bookingRegiao) return res.status(404).json({ error: 'Reserva não encontrada.' });
+      if (!(await operatorMayAcceptBookingsInRegions(supabase, req.user.id, [bookingRegiao]))) {
+        return res.status(403).json({ error: 'Este serviço está fora dos seus municípios de atuação.' });
+      }
+
       const bloqueio = await mpGate(req.user.id)
       if (bloqueio) return res.status(409).json({ error: bloqueio })
       const pend = await pagamentoPendenteGate(req.user.id)
