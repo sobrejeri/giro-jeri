@@ -194,7 +194,27 @@ router.patch('/team/:id', async (req, res, next) => {
       if (!('company_commission_pct' in op)) return res.status(409).json({ error: MSG_133 });
       const atual = op.company_commission_pct == null ? null : Number(op.company_commission_pct);
       if (lido.pct !== atual) {
-        await materializarComissoes(req.user.id);
+        // Uma reserva ainda sem pagamento pode ser quitada depois da alteração.
+        // Nesse caso a data da taxa nova apagaria a obrigação de comissão antiga.
+        // Bloqueamos a mudança até liquidar/cancelar a carteira anterior.
+        if (atual > 0 && op.company_commission_since) {
+          const pendentes = await supabase.from('bookings')
+            .select('id', { count: 'exact', head: true })
+            .eq('operator_id', op.id)
+            .gte('created_at', op.company_commission_since)
+            .not('status_commercial', 'in', '(paid,cancelled,refunded,expired)');
+          if (pendentes.error) throw pendentes.error;
+          if ((pendentes.count ?? 0) > 0) {
+            return res.status(409).json({
+              error: 'Este operador ainda tem reservas aguardando pagamento. Finalize ou cancele essas reservas antes de mudar o percentual, para preservar as comissões anteriores.',
+            });
+          }
+        }
+
+        // A resposta de "migração pendente" nunca pode ser ignorada: isso
+        // mudaria a taxa e tornaria impossivel recuperar comissoes antigas.
+        const materializacao = await materializarComissoes(req.user.id);
+        if (materializacao.pendente) return res.status(409).json({ error: MSG_133 });
         mudancas.company_commission_pct = lido.pct;
         mudancas.company_commission_since = new Date().toISOString();
       }
@@ -204,6 +224,12 @@ router.patch('/team/:id', async (req, res, next) => {
       .eq('id', op.id).eq('company_id', req.user.id).select('id').maybeSingle();
     if (upd.error && colunaFaltante(upd.error) === 'region_ids') {
       return res.status(409).json({ error: 'Os municípios de atuação ainda não estão disponíveis. Avise a Turiva.' });
+    }
+    if (upd.error?.code === '23514'
+        && /users_commission_rate_history_guard|reservas pendentes ou comissoes antigas/.test(upd.error.message || '')) {
+      return res.status(409).json({
+        error: 'Não foi possível alterar o percentual: existem reservas pendentes ou comissões antigas ainda não registradas para este operador.',
+      });
     }
     if (upd.error) throw upd.error;
     if (!upd.data) return res.status(404).json({ error: 'Operador não encontrado na sua equipe.' });
