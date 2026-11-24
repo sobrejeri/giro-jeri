@@ -25,7 +25,7 @@ import { materializarComissoes } from './companySellerPayouts.js';
 const router = Router();
 
 const CAMPOS = 'id, full_name, email, phone, document_type, document_number, is_active, created_at';
-const OPCIONAIS = ['region_ids', 'company_removed_at', 'company_commission_pct'];   // migrações 106, 130 e 133
+const OPCIONAIS = ['region_ids', 'company_removed_at', 'company_commission_pct', 'company_commission_since']; // migrações 106, 130 e 133
 const MSG_133 = 'O percentual do operador ainda não foi ativado no banco (migração 133). Avise a Turiva.';
 
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
