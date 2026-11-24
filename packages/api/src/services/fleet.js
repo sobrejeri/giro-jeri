@@ -84,6 +84,28 @@ export async function serviceRegionIdsBatch(supabase, bookings) {
   return out;
 }
 
+// Guarda server-side para ACEITE: a lista ja filtra por municipios, mas um
+// cliente poderia chamar POST /accept com um id que nunca viu na lista.
+// Na ausencia de regiao configurada, da coluna da migration 106 ou do dado
+// minimo da reserva, o aceite falha fechado (ao contrario do feed legado).
+export async function operatorMayAcceptBookingsInRegions(supabase, operatorId, bookings) {
+  if (!operatorId || !Array.isArray(bookings) || bookings.length === 0) return false;
+  const mapa = await operatorRegionSets(supabase, [operatorId]);
+  const meusMunicipios = mapa?.get(operatorId);
+  if (!meusMunicipios?.size) return false;
+
+  const semRegiao = bookings.filter((b) => !b?.region_id);
+  const porServico = semRegiao.length
+    ? await serviceRegionIdsBatch(supabase, semRegiao) : new Map();
+
+  return bookings.every((b) => {
+    if (!b?.id) return false;
+    if (b.region_id) return meusMunicipios.has(b.region_id);
+    const fallback = porServico.get(b.id);
+    return !!fallback && [...fallback].some((r) => meusMunicipios.has(r));
+  });
+}
+
 // Veículos EXIGIDOS por cada reserva.
 // Ordem de resolução:
 //   1. booking_vehicles (reserva privativa: o cliente escolheu os veículos);
