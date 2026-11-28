@@ -129,13 +129,17 @@ test('turista: o toque leva à cotação em todas as entradas', () => {
   assert.match(turista('pages/TransfersDesktop.jsx'), /if \(ehSobCotacao\(r\)\) \{ abrirCotacaoDaRota\(r\); return \}/)
 })
 
-test('turista: Montar meu passeio chega preenchido e o pedido sai com a etiqueta', () => {
+test('turista: passeio sob cotacao usa roteiro fixo e nao exige partida duplicada', () => {
   const pp = turista('pages/PasseioPersonalizado.jsx')
   assert.match(pp, /const passeioId = params\.get\('passeio'\)/)
-  assert.match(pp, /setStops\(paradas\.map\(\(p\) => \(\{ id: nextId\.current\+\+, name: p\.name, stopId: p\.stop_id \|\| null, outro: !p\.stop_id \}\)\)\)/)
+  assert.match(pp, /roteiroFixoDoPasseio\(passeio\)/)
+  assert.match(pp, /!passeioId && \(/, 'so mostra o editor na montagem livre')
+  assert.match(pp, /\.\.\.\(roteiroFixo \|\| \{/, 'cotacao envia o roteiro do cadastro')
+  assert.match(pp, /passeioId \? !!roteiroFixo : origin\.trim\(\)\.length >= 2/, 'sem passeio, origem continua obrigatoria')
   assert.match(pp, /\.\.\.\(passeio\?\.id \? \{ tour_id: passeio\.id \} : \{\}\)/)
   assert.match(pp, /Passeio escolhido · sob cotação/)
   assert.match(pp, /`\/passeio-personalizado\$\{passeioId \? `\?passeio=/, 'login volta para o mesmo passeio')
+  assert.doesNotMatch(pp, /Roteiro já preenchido — ajuste se quiser/, 'nao prometer editor ou parada quando nao ha roteiro estruturado')
 })
 
 test('turista: translado personalizado com a rota — etiqueta só enquanto origem e destino forem os dela', () => {
