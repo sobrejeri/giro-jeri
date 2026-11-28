@@ -45,5 +45,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: chave-de-teste-invalida-sem-acesso
           SUPABASE_ANON_KEY: chave-de-teste-invalida-sem-acesso
 
+      - name: Build turista interface (quote itinerary UI)
+        run: npm run build --workspace=packages/turista
+
       - name: Build admin interface (payout UI)
         run: npm run build --workspace=packages/admin
