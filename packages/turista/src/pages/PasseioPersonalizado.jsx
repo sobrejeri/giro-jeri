@@ -22,6 +22,7 @@ import { pontosDaRegiao, normalizarLugar } from '../lib/pontosTuristicos'
 import { useLocaisProximos } from '../lib/locaisProximos'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
+import { roteiroFixoDoPasseio } from '../lib/roteiroFixoPasseio'
 
 // Próximo horário "redondo" (de 30 em 30 min) a partir de agora — usado quando
 // a data é hoje e o horário escolhido já passou.
@@ -112,33 +113,18 @@ export default function PasseioPersonalizado() {
   const [originMeta, setOriginMeta] = useState(null)
   const [stops, setStops] = useState(() => [novaParada()])
 
-  // Passeio SOB COTAÇÃO escolhido na vitrine (?passeio=<id>, migração 128): o
-  // roteiro dele chega pronto e o pedido sai com a etiqueta do passeio — a
-  // cooperativa sabe de qual passeio é, mesmo que o cliente ajuste as paradas.
+  // Passeio SOB COTAÇÃO escolhido na vitrine (?passeio=<id>, migração 128):
+  // roteiro do catálogo fixo, sem editor duplicado no formulário. O cliente
+  // escolhe veículo, serviços, data e pessoas; a cooperativa recebe o tour_id.
   const [params] = useSearchParams()
   const passeioId = params.get('passeio')
-  const { data: passeio } = useQuery({
+  const { data: passeio, isLoading: carregandoPasseio, isError: erroPasseio } = useQuery({
     queryKey:  ['tour', passeioId],
     queryFn:   () => api.getTour(passeioId),
     enabled:   !!passeioId,
     staleTime: 5 * 60_000,
   })
-  const preenchidoCom = useRef(null)   // id do passeio cujo roteiro já entrou
-  useEffect(() => {
-    if (!passeio?.id || preenchidoCom.current === passeio.id) return
-    preenchidoCom.current = passeio.id
-    const paradas = Array.isArray(passeio.quote_stops) ? passeio.quote_stops.filter((p) => p?.name) : []
-    if (paradas.length) {
-      // Parada da lista do admin leva o id; sem id, vai como destino escrito.
-      setStops(paradas.map((p) => ({ id: nextId.current++, name: p.name, stopId: p.stop_id || null, outro: !p.stop_id })))
-    }
-    // Saída fixa do passeio (ex.: heliponto) já entra como ponto de partida.
-    if (passeio.meeting_point_name) {
-      setOrigin(passeio.meeting_point_name)
-      const lat = Number(passeio.meeting_latitude), lon = Number(passeio.meeting_longitude)
-      setOriginMeta(passeio.meeting_latitude != null && Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null)
-    }
-  }, [passeio])
+  const roteiroFixo = useMemo(() => roteiroFixoDoPasseio(passeio), [passeio])
   const [qtdVeiculos, setQtdVeiculos] = useState({})   // id do veículo → quantidade
   const [verVeiculos, setVerVeiculos] = useState(false) // lista de veículos aberta ("Ver tudo")
   const [servicosOn, setServicosOn] = useState({})     // id do serviço (guia) → incluído
@@ -215,7 +201,9 @@ export default function PasseioPersonalizado() {
     const { [id]: _antigo, ...resto } = m
     return n > 0 ? { ...resto, [id]: n } : resto
   })
-  const canSubmit = origin.trim().length >= 2 && !!time && !!region?.id
+  // Para passeio selecionado, a rota vem do cadastro, inclusive quando o
+  // ponto de partida ainda será combinado. Para montagem livre, segue obrigatório.
+  const canSubmit = !!time && !!region?.id && (passeioId ? !!roteiroFixo : origin.trim().length >= 2)
 
   // Setter funcional: nunca sobrescreve uma parada com um valor antigo.
   const setStop     = (id, patch) => setStops((arr) => arr.map((s) => (s.id === id ? { ...s, ...patch } : s)))
@@ -227,7 +215,7 @@ export default function PasseioPersonalizado() {
     setQtdVeiculos({}); setVerVeiculos(false); setServicosOn({}); setVehicleText(''); setPeople(2); setNotes('')
     setSuccess(false); setError('')
     // "Montar outro passeio" começa do zero, sem o passeio da vitrine.
-    if (passeioId) { preenchidoCom.current = null; navigate('/passeio-personalizado', { replace: true }) }
+    if (passeioId) navigate('/passeio-personalizado', { replace: true })
   }
 
   async function handleSubmit() {
@@ -246,25 +234,30 @@ export default function PasseioPersonalizado() {
     // Serviços (o guia) vão nas observações: o pedido não tem campo próprio, e
     // é ali que a cooperativa lê o que precisa entrar no valor.
     const observacoes = [
+      // Alguns passeios antigos (como Pôr do Sol na Duna) têm descrição,
+      // mas quote_stops/meeting_point ainda vazios. A descrição acompanha o
+      // pedido sem virar paradas inventadas.
+      roteiroFixo && passeio?.short_description?.trim()
+        ? `Descrição do passeio: ${passeio.short_description.trim()}` : null,
       escolhidos.length && !cabe ? `Veículos: ${listaVeiculos}` : null,
       servicosEscolhidos.length ? `Serviços: ${servicosEscolhidos.map((s) => s.name).join(' + ')}` : null,
       notes.trim() || null,
-    ].filter(Boolean).join(' · ') || undefined
+    ].filter(Boolean).join(' · ').slice(0, 2000) || undefined
     try {
       await api.requestTourQuote({
-        region_id:         region.id,
-        origin_place_name: origin.trim(),
-        origin_latitude:   originMeta?.lat ?? undefined,
-        origin_longitude:  originMeta?.lon ?? undefined,
-        // Da lista: leva o id da parada. "Outro destino": marcado para a
-        // cooperativa avaliar.
-        stops: stops
-          .filter((s) => s.name.trim())
-          .map((s) => ({
+        region_id: region.id,
+        // Sob cotação na vitrine: usa o roteiro do cadastro, sem pedir que o
+        // turista preencha novamente. Montagem livre preserva o editor antigo.
+        ...(roteiroFixo || {
+          origin_place_name: origin.trim(),
+          origin_latitude: originMeta?.lat ?? undefined,
+          origin_longitude: originMeta?.lon ?? undefined,
+          stops: stops.filter((s) => s.name.trim()).map((s) => ({
             name: s.name.trim(), lat: null, lng: null,
             ...(s.stopId ? { stop_id: s.stopId } : {}),
             ...(s.outro ? { outro: true } : {}),
           })),
+        }),
         vehicle_type:  vehicleType,
         service_date:  format(date, 'yyyy-MM-dd'),
         service_time:  time,
@@ -325,8 +318,11 @@ export default function PasseioPersonalizado() {
                   <p className="text-[10px] font-bold uppercase tracking-wide text-brand">Passeio escolhido · sob cotação</p>
                   <p className="text-[14px] font-extrabold text-gray-900 leading-snug">{passeio.name}</p>
                   <p className="text-[11px] text-gray-500 leading-snug mt-0.5">
-                    Roteiro já preenchido — ajuste se quiser. A cooperativa envia o valor.
+                    {passeio.short_description?.trim() || 'Roteiro definido no passeio. A cooperativa envia o valor.'}
                   </p>
+                  {!passeio.meeting_point_name && (
+                    <p className="text-[11px] text-gray-400 mt-1">Ponto de partida a combinar com a cooperativa.</p>
+                  )}
                 </div>
               </section>
             )}
@@ -334,12 +330,23 @@ export default function PasseioPersonalizado() {
             <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-3">
               <Zap size={14} className="text-amber-500 shrink-0 mt-0.5" />
               <p className="text-[12px] text-amber-700 leading-relaxed">
-                Monte o roteiro do seu jeito. A cooperativa envia o valor e você decide se aceita — sem compromisso.
+                {roteiroFixo
+                  ? 'O roteiro deste passeio já está definido. Escolha os detalhes e a cooperativa envia o valor — sem compromisso.'
+                  : passeioId
+                    ? (carregandoPasseio ? 'Carregando o passeio selecionado…' : 'Confira se o passeio está disponível para cotação.')
+                    : 'Monte o roteiro do seu jeito. A cooperativa envia o valor e você decide se aceita — sem compromisso.'}
               </p>
             </div>
 
-            {/* Roteiro: embarque + paradas */}
-            <section className="bg-white rounded-2xl border border-gray-100 relative overflow-visible">
+            {passeioId && erroPasseio && (
+              <p role="alert" className="text-[12px] text-red-500 bg-red-50 rounded-xl px-4 py-2.5">
+                Não foi possível carregar o passeio. Volte e selecione novamente.
+              </p>
+            )}
+
+            {/* Montagem livre: só aqui o cliente precisa escolher partida e paradas. */}
+            {!passeioId && (
+              <section className="bg-white rounded-2xl border border-gray-100 relative overflow-visible">
               <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-2">Roteiro</p>
               <div className="px-4 pb-4 space-y-3">
                 <div>
@@ -383,7 +390,8 @@ export default function PasseioPersonalizado() {
                   <Plus size={14} /> Adicionar parada
                 </button>
               </div>
-            </section>
+              </section>
+            )}
 
             {/* Veículos — catálogo da plataforma, com quantidade */}
             <section className="bg-white rounded-2xl border border-gray-100">
@@ -591,7 +599,9 @@ export default function PasseioPersonalizado() {
               </button>
               {!canSubmit && !loading && (
                 <p className="text-[11px] text-gray-400 text-center">
-                  {!region?.id ? 'Selecione uma região no topo do app.' : 'Informe o ponto de partida para pedir a cotação.'}
+                  {!region?.id ? 'Selecione uma região no topo do app.'
+                    : passeioId ? 'Aguarde o carregamento do passeio para pedir a cotação.'
+                    : 'Informe o ponto de partida para pedir a cotação.'}
                 </p>
               )}
             </div>
