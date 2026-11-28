@@ -15,6 +15,7 @@ import { notifyUser, notifyOperatorsAndAdmin } from '../services/notify.js'
 import { notifyOperatorsNewTourQuote, notifyClientTourQuoteReady } from '../services/whatsapp.js'
 import { colunaFaltante } from '../lib/colunaFaltante.js'
 import dayjs from 'dayjs'
+import { avaliarPrazoCotacaoPasseio } from '../lib/tourQuoteSchedule.js'
 
 const router = Router()
 
@@ -35,7 +36,7 @@ const createSchema = z.object({
   origin_latitude:   z.number().optional().nullable(),
   origin_longitude:  z.number().optional().nullable(),
   stops:             z.array(stopSchema).max(20).optional().default([]),
-  vehicle_type:      z.string().max(80).optional().nullable(),
+  vehicle_type:      z.string().trim().min(2, 'Selecione pelo menos um veículo para o passeio.').max(80),
   service_date:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (YYYY-MM-DD)'),
   service_time:      z.string().regex(/^\d{2}:\d{2}$/, 'Horário inválido (HH:MM)'),
   people_count:      z.number({ coerce: true }).int().min(1).max(200),
@@ -95,18 +96,24 @@ function esconderContato(linhas) {
 router.post('/', authenticate, async (req, res, next) => {
   try {
     const body = createSchema.parse(req.body)
-    if (dayjs(`${body.service_date}T${body.service_time}`).isBefore(dayjs())) {
-      return res.status(400).json({ error: 'A data e o horário do passeio já passaram. Escolha outro.' })
-    }
-
-    // Passeio sob cotação de onde o pedido veio: confere que existe (id
-    // inventado não vira etiqueta) e guarda o nome para os avisos.
+    // Passeio sob cotação de onde o pedido veio: busca também o prazo do
+    // cadastro. A regra é validada no SERVIDOR antes do INSERT, mesmo se
+    // alguém tentar enviar o POST diretamente, sem a interface.
     let passeio = null
     if (body.tour_id) {
-      const { data: t } = await supabase
-        .from('tours').select('id, name').eq('id', body.tour_id).eq('is_active', true).maybeSingle()
-      passeio = t || null
+      const { data: t, error: tourErr } = await supabase
+        .from('tours')
+        .select('id, name, min_advance_hours, booking_cutoff_time, service_window_start, service_window_end')
+        .eq('id', body.tour_id).eq('is_active', true).maybeSingle()
+      if (tourErr) throw tourErr
+      if (!t) return res.status(404).json({ error: 'Passeio indisponível. Selecione novamente.' })
+      passeio = t
     }
+    const prazo = avaliarPrazoCotacaoPasseio({
+      date: body.service_date, time: body.service_time, tour: passeio,
+    })
+    if (!prazo.ok) return res.status(400).json({ error: prazo.error })
+
     const { tour_id: _tourId, ...semEtiqueta } = body
     const linha = { ...semEtiqueta, user_id: req.user.id, source_channel: 'app', status: 'pending_quote' }
 
@@ -139,7 +146,11 @@ router.post('/', authenticate, async (req, res, next) => {
 
     res.status(201).json(data)
   } catch (err) {
-    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Dados inválidos', details: err.errors })
+    if (err instanceof z.ZodError) return res.status(400).json({
+      error: err.errors?.[0]?.path?.[0] === 'vehicle_type'
+        ? 'Selecione pelo menos um veículo para o passeio.' : 'Dados inválidos',
+      details: err.errors,
+    })
     next(err)
   }
 })
@@ -212,6 +223,24 @@ router.post('/:id/accept', authenticate, async (req, res, next) => {
       await supabase.from('tour_quotes').update({ status: 'expired' }).eq('id', quote.id)
       return res.status(400).json({ error: 'Esta cotação expirou. Solicite uma nova.' })
     }
+
+    // Não transforma uma cotação em reserva se o prazo de antecedência ou
+    // cutoff venceu durante a negociação do preço. Checar antes de gravar
+    // status='accepted', para não deixar cotação aceita sem reserva.
+    let passeioDoAceite = null
+    if (quote.tour_id) {
+      const { data: t, error: eTour } = await supabase.from('tours')
+        .select('id, min_advance_hours, booking_cutoff_time, service_window_start, service_window_end')
+        .eq('id', quote.tour_id).eq('is_active', true).maybeSingle()
+      if (eTour) throw eTour
+      if (!t) return res.status(409).json({ error: 'O passeio não está mais disponível. Solicite uma nova cotação.' })
+      passeioDoAceite = t
+    }
+    const prazo = avaliarPrazoCotacaoPasseio({
+      date: quote.service_date, time: String(quote.service_time || '').slice(0, 5),
+      tour: passeioDoAceite,
+    })
+    if (!prazo.ok) return res.status(409).json({ error: `${prazo.error} Solicite uma nova cotação para outra data.` })
 
     await supabase.from('tour_quotes')
       .update({ status: 'accepted', client_responded_at: new Date().toISOString() }).eq('id', quote.id)

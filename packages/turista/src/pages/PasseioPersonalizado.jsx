@@ -23,6 +23,7 @@ import { useLocaisProximos } from '../lib/locaisProximos'
 import { useAuth } from '../contexts/AuthContext'
 import { useRegion } from '../contexts/RegionContext'
 import { roteiroFixoDoPasseio } from '../lib/roteiroFixoPasseio'
+import { avaliarPrazoCotacaoPasseio } from '../../../api/src/lib/tourQuoteSchedule.js'
 
 // Próximo horário "redondo" (de 30 em 30 min) a partir de agora — usado quando
 // a data é hoje e o horário escolhido já passou.
@@ -131,6 +132,7 @@ export default function PasseioPersonalizado() {
   const [vehicleText, setVehicleText] = useState('')   // só se a região não tiver catálogo
   const [date, setDate] = useState(startOfDay(new Date()))
   const [time, setTime] = useState('08:00')
+  const [agoraMs, setAgoraMs] = useState(() => Date.now())
   const [people, setPeople] = useState(2)
   const [notes, setNotes] = useState('')
   const [showDate, setShowDate] = useState(false)
@@ -139,20 +141,36 @@ export default function PasseioPersonalizado() {
   const [success, setSuccess] = useState(false)
   const timeRef = useRef(null)
 
-  const minDate = startOfDay(new Date())
-  const minTime = isSameDay(date, minDate) ? format(new Date(), 'HH:mm') : '00:00'
+  // Regra de antecedência e corte no fuso de Fortaleza, calculada no
+  // MESMO helper puro usado pela API. Se o usuário deixar a tela aberta,
+  // revalidamos a cada minuto e quando voltar ao aplicativo.
+  useEffect(() => {
+    const atualizar = () => setAgoraMs(Date.now())
+    const intervalo = setInterval(atualizar, 60_000)
+    document.addEventListener('visibilitychange', atualizar)
+    return () => { clearInterval(intervalo); document.removeEventListener('visibilitychange', atualizar) }
+  }, [])
+  const dataIso = format(date, 'yyyy-MM-dd')
+  const prazo = avaliarPrazoCotacaoPasseio({
+    date: dataIso, time,
+    tour: passeioId ? passeio : null,
+    nowMs: agoraMs,
+  })
+  const minDate = new Date(`${prazo.minDateIso}T00:00:00`)
+  const minTime = dataIso === prazo.minDateIso ? prazo.minTime : '00:00'
   const dateLabel = isToday(date) ? 'Hoje'
-    : isSameDay(date, addDays(minDate, 1)) ? 'Amanhã'
+    : isSameDay(date, addDays(startOfDay(new Date()), 1)) ? 'Amanhã'
     : format(date, 'd MMM', { locale: ptBR })
 
-  // Data = hoje e o horário já passou (ex.: abriu a tela às 10h com 08:00
-  // pré-selecionado) → avança para o próximo horário válido, senão a API
-  // recusa com "o horário já passou".
+  // Nunca permitir data anterior à antecedência/cutoff; se o horário mínimo
+  // avança dentro do dia, o relógio escolhido acompanha automaticamente.
   useEffect(() => {
-    if (isSameDay(date, startOfDay(new Date())) && time && time < format(new Date(), 'HH:mm')) {
-      setTime(proximoHorario())
+    if (dataIso < prazo.minDateIso) {
+      setDate(minDate)
+      return
     }
-  }, [date]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (dataIso === prazo.minDateIso && time < minTime) setTime(minTime)
+  }, [dataIso, prazo.minDateIso, minTime, time]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Veículos CADASTRADOS na plataforma — o catálogo inteiro, não só o da
   // região: as regiões são municípios (Jijoca, Cruz…) e cada veículo fica
@@ -203,7 +221,10 @@ export default function PasseioPersonalizado() {
   })
   // Para passeio selecionado, a rota vem do cadastro, inclusive quando o
   // ponto de partida ainda será combinado. Para montagem livre, segue obrigatório.
-  const canSubmit = !!time && !!region?.id && (passeioId ? !!roteiroFixo : origin.trim().length >= 2)
+  const veiculoEscolhido = escolhidos.length > 0
+    || (!veiculosLoading && veiculos.length === 0 && vehicleText.trim().length >= 2)
+  const canSubmit = !!region?.id && veiculoEscolhido && prazo.ok
+    && (passeioId ? !!roteiroFixo : origin.trim().length >= 2)
 
   // Setter funcional: nunca sobrescreve uma parada com um valor antigo.
   const setStop     = (id, patch) => setStops((arr) => arr.map((s) => (s.id === id ? { ...s, ...patch } : s)))
@@ -221,6 +242,15 @@ export default function PasseioPersonalizado() {
   async function handleSubmit() {
     // Volta para ESTA tela depois do login — com o passeio escolhido, se houver.
     if (!token) { navigate('/login', { state: { from: `/passeio-personalizado${passeioId ? `?passeio=${encodeURIComponent(passeioId)}` : ''}` } }); return }
+    // O prazo pode vencer entre a exibição e o clique; a API valida novamente.
+    const regraAtual = avaliarPrazoCotacaoPasseio({
+      date: format(date, 'yyyy-MM-dd'), time, tour: passeioId ? passeio : null,
+    })
+    if (!regraAtual.ok) {
+      setAgoraMs(Date.now())
+      setError(regraAtual.error)
+      return
+    }
     if (!canSubmit) return
     setLoading(true); setError('')
     // Veículos para a cooperativa: "2× Buggy + 1× Quadriciclo". O campo aceita
@@ -399,7 +429,7 @@ export default function PasseioPersonalizado() {
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Veículos desejados</p>
                 {escolhidos.length > 0
                   ? <button type="button" onClick={() => setQtdVeiculos({})} className="text-[11px] font-semibold text-red-400">limpar</button>
-                  : <span className="text-[10px] text-gray-400">opcional</span>}
+                  : <span className="text-[10px] font-semibold text-brand">obrigatório</span>}
               </div>
               <div className="px-4 pb-4 space-y-2.5">
                 {veiculosLoading ? (
@@ -467,6 +497,11 @@ export default function PasseioPersonalizado() {
                     className="w-full text-[13px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-brand/30 placeholder-gray-400" />
                 )}
 
+                {!veiculoEscolhido && !veiculosLoading && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                    Selecione ao menos um veículo para pedir a cotação.
+                  </p>
+                )}
                 {/* Lugares da escolha × pessoas do grupo */}
                 {escolhidos.length > 0 && lugares > 0 && (faltamLugares === 0 ? (
                   <p className="text-[11px] text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 flex items-center gap-1.5">
@@ -540,6 +575,14 @@ export default function PasseioPersonalizado() {
                     className="absolute inset-0 opacity-0 w-full cursor-pointer" />
                 </button>
               </div>
+              <p className="text-[11px] text-gray-500 px-4 pb-3 leading-relaxed">
+                Antecedência mínima: {prazo.hours} hora(s). Solicitações para o mesmo dia até {prazo.cutoff} (Fortaleza).
+              </p>
+              {!prazo.ok && (
+                <p role="alert" className="text-[11px] text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mx-4 mb-3">
+                  {prazo.error}
+                </p>
+              )}
             </section>
 
             {/* Pessoas */}
@@ -600,7 +643,9 @@ export default function PasseioPersonalizado() {
               {!canSubmit && !loading && (
                 <p className="text-[11px] text-gray-400 text-center">
                   {!region?.id ? 'Selecione uma região no topo do app.'
-                    : passeioId ? 'Aguarde o carregamento do passeio para pedir a cotação.'
+                    : !veiculoEscolhido ? 'Selecione pelo menos um veículo para continuar.'
+                    : !prazo.ok ? prazo.error
+                    : passeioId && !roteiroFixo ? 'Aguarde o carregamento do passeio para pedir a cotação.'
                     : 'Informe o ponto de partida para pedir a cotação.'}
                 </p>
               )}

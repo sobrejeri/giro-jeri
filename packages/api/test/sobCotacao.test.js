@@ -91,7 +91,7 @@ test('servidor recusa reservar pelo valor fixo um passeio/rota sob cotação', (
 // ── Cotação com etiqueta ────────────────────────────────────────────────────
 test('cotação de passeio leva a etiqueta do passeio — e cai nas observações sem a migração', () => {
   assert.match(tourQ, /tour_id:\s+z\.string\(\)\.uuid\(\)\.optional\(\)\.nullable\(\)/)
-  assert.match(tourQ, /\.from\('tours'\)\.select\('id, name'\)\.eq\('id', body\.tour_id\)\.eq\('is_active', true\)/, 'id inventado não vira etiqueta')
+  assert.match(tourQ, /\.from\('tours'\)[\s\S]{0,220}\.eq\('id', body\.tour_id\)\.eq\('is_active', true\)/, 'id inventado não vira etiqueta')
   assert.match(tourQ, /colunaFaltante\(error\) === 'tour_id'/)
   assert.match(tourQ, /`Passeio escolhido: \$\{passeio\.name\}`/)
   assert.match(tourQ, /res\.json\(esconderContato\(await comEtiquetaDoPasseio\(data\)\)\)/, 'a fila da cooperativa recebe o nome')
